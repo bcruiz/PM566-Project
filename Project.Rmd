@@ -13,7 +13,7 @@ library(httr)
 library(rjson)
 ```
 
-```{r Covid Github, message=FALSE}
+```{r Covid Github, message=FALSE, warning=FALSE}
 download.file("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv", "time_series_covid19_confirmed_US.csv", method="libcurl", timeout = 60)
 
 covidGithub <- data.table::fread("time_series_covid19_confirmed_US.csv")
@@ -33,7 +33,7 @@ covidGithub <- covidGithub[ !(covidGithub$Admin2 %in% c('Unassigned', 'Out of CA
 
 We see that some of the counties do not make sense such as 'Unassigned' and 'Out of CA'. Therefore, we can remove these reported counties.
 
-```{r,message=FALSE}
+```{r, message=FALSE}
 # Daily AQI for every county in California
 csvAQI_data <- read_csv("ad_viz_plotval_data.csv")
 
@@ -61,3 +61,46 @@ knitr::kable(matched, col.names = 'Matched Counties')
 ```
 
 We will be using these 51 counties from our matched table, so that both data sets have records from the same county.
+
+```{r Melting covid data set}
+# Keeping the same matched couties in covid data set
+covidGithub <- covidGithub[covidGithub$Admin2 %in% matched, ]
+
+# Attempt to melt covid to long format
+covidGithubmelt <- melt(covidGithub, id = 1:11, variable.name = 'Date', variable.factor = FALSE,
+                        value.name = 'Confirmed')
+covidGithubmelt$Date <- as.Date(covidGithubmelt$Date, format = "%m/%d/%y")
+
+# Current covid dates for each county
+covidGithubmelt%>%
+  group_by(Admin2)%>%
+  summarise(MinDate = min(Date), MaxDate = max(Date))%>%
+  knitr::kable()
+```
+
+```{r Merge of covid and AQI}
+# Renaming county code in AQI to FIPS to match with covid data set
+csvAQI_data <- csvAQI_data%>%
+  rename(FIPS = COUNTY_CODE, PM2.5 = `Daily Mean PM2.5 Concentration`)
+
+csvAQI_data$FIPS <- paste0(6, csvAQI_data$FIPS)
+csvAQI_data$FIPS <- as.numeric(csvAQI_data$FIPS)
+
+csvAQI_data <- csvAQI_data[, c('Date', 'PM2.5', 'DAILY_AQI_VALUE', 'STATE', 'FIPS', 'COUNTY')]
+
+# Renaming key variables in covid data set to merge with AQI
+covidGithubmelt <- covidGithubmelt%>%
+  rename(COUNTY = Admin2, STATE = Province_State, SITE_LATITUDE = Lat, SITE_LONGITUDE = Long_)
+
+# To include geolocation of covid recording site
+covidGithubmelt <- covidGithubmelt[, c('Date', 'FIPS', 'COUNTY', 'STATE',
+                                       "SITE_LATITUDE", "SITE_LONGITUDE", 'Confirmed')]
+
+# Full outer join
+mergeFullOut <- merge(csvAQI_data, covidGithubmelt, all = TRUE)
+
+# Deletes missing values for the first records of covid data in California appeared in 1/22/2020
+mergeFullOut <- na.omit(mergeFullOut)
+```
+
+
