@@ -18,19 +18,11 @@ library(rgdal)
 library(ggrepel)
 ```
 
+## Introduction
 With the recent events of covid cases on the rise and steadly holding just barely and with the rise of fires all over California with the sky being orange miles away from the fire for days, this year has definitely been so unusual and unprecedented times. The Covid virus has been found to inhibit respiratory functions of the host and with the recent fires the air quality within many cities of the 58 counties has sky rocketed to concerning levels. Depending on someones geographical location and which county they live in their health could already be at risk due to the air quality alone. Would this make a subject more vulnerable to contracting covid if their respiratory function was already inhibited? My hypothesis that I want to further explore is whether there is an association between air quality and confirmed cases of covid amongst people within the counties of California.
 
-These datasets are so heavily recorded as to being daily accounts within each county for both covid and air quality. The data set for daly covid cases by every county and US territories is aggregated by The Center for Systems Science and Engineering (CSSE) at Johns Hopkins University from state and department of public health [Daily Covid Cases] (https://github.com/CSSEGISandData/COVID-19). Air quality is maintained daly by the Environmental Protection Agency (EPA) [Daily AQI] (https://www.epa.gov/outdoor-air-quality-data/download-daily-data). 
-
-While exploring daily AQI, we see that some of the counties do not make sense such as 'Unassigned' and 'Out of CA'. Therefore, we can remove these reported counties to make both covid cases dataset and the AQI data set alike. A matched table was also created to find the intesection of counties from both data sets, and found that 51 counties have matched. Creating summary tables for the start and end dates of our initial query for both data sets we find that for some of our counties within the AQI dataset, they do not have the current end date of 10/06/2020. Some counties have records that end during the middle and begining of the year, this could be due to many factors being underfunded or unmanned because of the coronavirus, burned out by the fires, or other natural causes for example. We also observe that some counties are not even reported for AQI and could be that they do not have a recording site within that county. For further analysis counties that do not have AQI recorded will be dropped in the comparision of covid confirmed cases in each county. We also see the trend that covid cases started to be recorded within the United States in 1/22/2020, for our exploratory data analysis we keep this date as our starting time for both covid cases and daily AQI.
-
-When wrangling the two data sets I renamed variables to match the other dataset so the merging would be much easier. At first our covid data set is oriented very wide with every single date from 1/22/2020 to 10/06/2020 having values of confirmed cases of covid for each county reported. Our AQI data set on the other hand is orientated long was with every row being the daily record of air quality for each county. To match the orientations I first melt the covid data set from wide to long orientation in order to not loose data and to match the rows of date and county for the AQI data set. When merging the two data sets as our final data set we match records and group by key varibales such as date, the county code (FIPS), and county name. New information is brought from covid data being confirmed case variables and recording geographical locations for each county and is combined with the new information from daily AQI being PM 2.5 and daily AQI values. When merging the two datasets together I have found that when records from one set did not match the other new observations were made with missing data, but for the observations that matched by date, county code (FIPS), and county name they formed the desired combined observation. Deleting the missing values will help with our analysis and will not cause distortion.
-
-In exploring our new combined data set of AQI and covid records by county we notice that some values for daily AQI have negative values and this cannot be as PM 2.5 measures the microscopic particles in the air and there is simply no negative particles in the air, but rather 0. We delete all records that have negative PM 2.5 values, this could be due to malfunction error of the recording device. We also notice some extreme values for daily AQI within Mariposa county as this county had the most extreme value of 574 due to the Ferguson fire. Sadly many counties within California were experencing multiple fires some that have burned so vastly that firefighter from other states and even from Mexico came to support.
-
-In our visual analysis we see all the counties within California with their names. We also see the grand total of confirmed cases by the end date and a heat map of each county with the counties being the most frequent in counts. In our visual exploration of daily covid cases we see slight dents along our line as covid cases are quadratically increasing. These small dents could be innacuracies in the recording as wild fires, protests, and holidays could have inhibited accurate records. We also see the cyclic trend of AQI constantly rising and dropping with this trend being the most rapid at the begining of the year until July with the sharp spike due to wild fires. We see more sharp spikes as the AQI continues to rise and worsen because for frequent and long burning wild fires during the second half of the year.
-
-We use linear regression to test the hypothesis whether there is an association between daily AQI on the number of confirmed covid cases. The indidual p-value for daily AQI is significant being <0.0001, we can conclude that daily AQI has a significant difference on confirmed covid cases. Our overall linear model is significant with a p-value <0.0001, which we can use our variables to predict covid cases. Our model however, has a very low R^2 value being that our model is only able to explain 4.37% of the variance in our model. We do find a positive association with AQI on covid cases, but to what extent is our model precise. For future analyis there might be underlying factors that could be contributing to this model such as county population. We see that counties with dense populations like Los Angeles county can have more confirmed cases compared to smaller counties in California because of the number of people per squre mile, the proximity of people occupying the county. Demographics such as age, gender, and race could be other contributing factors as different counties could all have different makeups that could be confounding of a person to contract covid.
+## Methods
+These datasets are so heavily recorded as to being daily accounts within each county for both covid and air quality. The data set for daly covid cases by every county and US territories is aggregated by The Center for Systems Science and Engineering (CSSE) at Johns Hopkins University from state and department of public health [Daily Covid Cases] (https://github.com/CSSEGISandData/COVID-19). Air quality is maintained daily by the Environmental Protection Agency (EPA) [Daily AQI] (https://www.epa.gov/outdoor-air-quality-data/download-daily-data). 
 
 ```{r Covid Github, message=FALSE, warning=FALSE}
 download.file("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv", "time_series_covid19_confirmed_US.csv", method="libcurl", timeout = 60)
@@ -52,7 +44,7 @@ covidGithub <- covidGithub[ !(covidGithub$Admin2 %in% c('Unassigned', 'Out of CA
 
 ```{r, message=FALSE}
 # Daily AQI for every county in California
-csvAQI_data <- read_csv("ad_viz_plotval_data.csv")
+csvAQI_data <- read_csv("data/ad_viz_plotval_data.csv")
 
 csvAQI_data$Date <- as.Date(csvAQI_data$Date, format = "%m/%d/%Y")
 
@@ -75,7 +67,10 @@ knitr::kable(df, col.names = c('covidCounty', 'aqiCounty', 'Binary'))
 knitr::kable(matched, col.names = 'Matched Counties')
 ```
 
-```{r Melting covid data set}
+### AQI Exploration
+While exploring daily AQI, we see that some of the counties do not make sense such as 'Unassigned' and 'Out of CA'. Therefore, we can remove these reported counties to make both covid cases dataset and the AQI data set alike. A matched table was also created to find the intesection of counties from both data sets, and found that 51 counties have matched. Creating summary tables for the start and end dates of our initial query for both data sets we find that for some of our counties within the AQI dataset, they do not have the current end date of 10/06/2020. Some counties have records that end during the middle and begining of the year, this could be due to many factors being underfunded or unmanned because of the coronavirus, burned out by the fires, or other natural causes for example. We also observe that some counties are not even reported for AQI and could be that they do not have a recording site within that county. For further analysis counties that do not have AQI recorded will be dropped in the comparision of covid confirmed cases in each county. We also see the trend that covid cases started to be recorded within the United States in 1/22/2020, for our exploratory data analysis we keep this date as our starting time for both covid cases and daily AQI.
+
+```{r Melting covid data set, message = FALSE, warning = FALSE}
 # Attempt to melt covid to long format
 covidGithubmelt <- melt(covidGithub, id = 1:11, variable.name = 'Date', variable.factor = FALSE,
                         value.name = 'Confirmed')
@@ -129,6 +124,9 @@ plot_usmap(data = mapdf, values='Confirmed', include = 'CA')+
         legend.title = element_text(size = 14), legend.text = element_text(size = 12))
 ```
 
+### Covid confirmed cases by county
+I can easily represent all covid confirmed cases in every county within the United States, but chose all counties within California. With there being 58 total counties within the state of California I represented the county map of all including their names. In running the grand total of confirmed covid cases by our speciifc end date of 10/06/2020 in our heat map, we see that Los Angeles county has by far the most cases compared to other counties that are much smaller in size and population. 
+
 ```{r Merge of covid and AQI}
 # Keeping the same matched couties in covid data set
 covidGithubmelt <- covidGithubmelt[covidGithubmelt$COUNTY %in% matched, ]
@@ -140,6 +138,9 @@ mergeFullOut <- merge(csvAQI_data, covidGithubmelt, all = TRUE)
 mergeFullOut <- na.omit(mergeFullOut)
 ```
 
+### Merge of Covid and AQI data sets
+When wrangling the two data sets I renamed variables to match the other dataset so the merging would be much easier. At first our covid data set is oriented very wide with every single date from 1/22/2020 to 10/06/2020 having values of confirmed cases of covid for each county reported. Our AQI data set on the other hand is orientated long was with every row being the daily record of air quality for each county. To match the orientations I first melt the covid data set from wide to long orientation in order to not loose data and to match the rows of date and county for the AQI data set. When merging the two data sets as our final data set we match records and group by key varibales such as date, the county code (FIPS), and county name. New information is brought from covid data being confirmed case variables and recording geographical locations for each county and is combined with the new information from daily AQI being PM 2.5 and daily AQI values. When merging the two datasets together I have found that when records from one set did not match the other new observations were made with missing data, but for the observations that matched by date, county code (FIPS), and county name they formed the desired combined observation. Deleting the missing values will help with our analysis and will not cause distortion.
+
 ```{r EDA Merge}
 # Could be in outout, but alos just mentioned of the extreme values for AQI and PM 2.5
 mergeFullOut%>%
@@ -147,11 +148,10 @@ mergeFullOut%>%
   summarise(MinPM2.5 = min(PM2.5), MaxPM2.5 = max(PM2.5), MinAQI = min(DAILY_AQI_VALUE),
             MaxAQI = max(DAILY_AQI_VALUE))%>%
   knitr::kable()
-  
-# # Post of AQI category from Enviornmental Protection Agency (EPA)
-# ![alt text here](C:/Users/Brandyn Ruiz/OneDrive/USC/PM566/Project/AQIEPA.png)
-
 ```
+
+### Summary of Merged data set
+In exploring our new combined data set of AQI and covid records by county we notice that some values for daily AQI have negative values and this cannot be as PM 2.5 measures the microscopic particles in the air and there is simply no negative particles in the air, but rather 0. We delete all records that have negative PM 2.5 values, this could be due to malfunction error of the recording device. We also notice some extreme values for daily AQI within Mariposa county as this county had the most extreme value of 574 due to the Ferguson fire. Sadly many counties within California were experencing multiple fires some that have burned so vastly that firefighter from other states and even from Mexico came to support.
 
 ```{r}
 # Line plot of daily covid cases in Los Angeles county
@@ -170,8 +170,14 @@ ggplot(mergeFullOut%>%
   labs(title = 'Daily AQI in Los Angeles County', y = 'AQI')
 ```
 
+### Visual Exploration
+In our visualization of daily covid cases we see slight dents along our line as covid cases are quadratically increasing. These small dents could be innacuracies in the recording as wild fires, protests, and holidays could have inhibited accurate records. We also see the cyclic trend of AQI constantly rising and dropping with this trend being the most rapid at the begining of the year until July with the sharp spike due to wild fires. We see more sharp spikes as the AQI continues to rise and worsen because for frequent and long burning wild fires during the second half of the year.
+
 ```{r Association test}
 # Linear Regression to test the association between Confirmed covid cases and daily AQI
 lm(Confirmed ~ DAILY_AQI_VALUE, data = mergeFullOut)%>%
   summary()
 ```
+
+## Conclusion
+We use linear regression to test the hypothesis whether there is an association between daily AQI on the number of confirmed covid cases. The indidual p-value for daily AQI is significant being <0.0001, we can conclude that daily AQI has a significant difference on confirmed covid cases. Our overall linear model is significant with a p-value <0.0001, which we can use our variables to predict covid cases. Our model however, has a very low $R^2$ value being that our model is only able to explain 4.37% of the variance in our model. We do find a positive association with AQI on covid cases, but to what extent is our model precise. For future analyis there might be underlying factors that could be contributing to this model such as county population. We see that counties with dense populations like Los Angeles county can have more confirmed cases compared to smaller counties in California because of the number of people per squre mile, the proximity of people occupying the county. Demographics such as age, gender, and race could be other contributing factors as different counties could all have different makeups that could be confounding of a person to contract covid.
