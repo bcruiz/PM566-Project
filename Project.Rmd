@@ -16,6 +16,7 @@ library(usmap)
 library(RColorBrewer)
 library(rgdal)
 library(ggrepel)
+library(plotly)
 ```
 
 ## Introduction
@@ -29,15 +30,16 @@ covidGithub <- data.table::fread("time_series_covid19_confirmed_US.csv")
 
 # Applying filter to only select covid confirmed cases in California
 covidGithub <- covidGithub%>%
-  filter(Province_State == 'California')
+  filter(Province_State == 'California')%>%
+  rename(county = Admin2)
 ```
 
 ```{r Covid Filter County}
 # Table listing all counties within California
-df <- unique(covidGithub$Admin2)
+df <- unique(covidGithub$county)
 knitr::kable(df, col.names = 'County')
 
-covidGithub <- covidGithub[ !(covidGithub$Admin2 %in% c('Unassigned', 'Out of CA')), ]
+covidGithub <- covidGithub[ !(covidGithub$county %in% c('Unassigned', 'Out of CA')), ]
 ```
 
 ```{r Melting Covid Data Set, message = FALSE, warning = FALSE}
@@ -48,37 +50,116 @@ covidGithubmelt$Date <- as.Date(covidGithubmelt$Date, format = "%m/%d/%y")
 
 # Current covid dates for each county
 covidGithubmelt%>%
-  group_by(Admin2)%>%
+  group_by(county)%>%
   summarise(MinDate = min(Date), MaxDate = max(Date))%>%
   knitr::kable()
 
-# Group by counties and order by date
+# Group by counties and order by date of dataset print out
 covidGithubmelt <- covidGithubmelt%>%
-  group_by(Admin2)%>%
+  group_by(county)%>%
   arrange(Date, .by_group = TRUE)
 ```
 
-```{r New Cases Varible}
-#Needs Fixing
+```{r New Cases Varible, warning=FALSE}
+# format the state variable
+county_list <- unique(covidGithubmelt$county)
+covidGithubmelt$county <- factor(covidGithubmelt$county, levels = county_list)
+
 # Add variables for new_cases:
-for (i in 1:length(covidGithubmelt)) {
-  cvd_subset = subset(cv_states, state == state_list[i])
-  cv_subset = cv_subset[order(cv_subset$date),]
+for (i in 1:length(county_list)) {
+  cvd_subset = subset(covidGithubmelt, county == county_list[i])
+  cvd_subset = cvd_subset[order(cvd_subset$Date),]
 
   # add starting level for new cases and deaths
-  cv_subset$new_cases = cv_subset$cases[1]
-  cv_subset$new_deaths = cv_subset$deaths[1]
+  cvd_subset$new_cases = covidGithubmelt$Confirmed[1]
 
-  #### FINISH THE CODE HERE ###
-  for (j in 2:nrow(cv_subset)) {
-    cv_subset$new_cases[j] =  cv_subset$cases[j] - cv_subset$cases[j-1] 
-    cv_subset$new_deaths[j] = cv_subset$deaths[j] - cv_subset$deaths[j-1]
+  for (j in 2:nrow(cvd_subset)) {
+    cvd_subset$new_cases[j] =  cvd_subset$Confirmed[j] - cvd_subset$Confirmed[j-1] 
   }
 
   # include in main dataset
-  cv_states$new_cases[cv_states$state==state_list[i]] = cv_subset$new_cases
-  cv_states$new_deaths[cv_states$state==state_list[i]] = cv_subset$new_deaths
+  covidGithubmelt$new_cases[covidGithubmelt$county == county_list[i]] = cvd_subset$new_cases
 }
+```
+
+```{r COVID Visual by County}
+p1<-ggplot(covidGithubmelt, aes(Date, new_cases, color = county))+
+  geom_line()+
+  geom_point(size = .5, alpha = 0.5)+
+  labs(title = 'Incidences of Covid Cases in California by County', y = 'New cases', color = 'County')
+ggplotly(p1)
+p1<-NULL
+```
+
+```{r}
+# FAILED attempt at county lables outside with color size being population estimate in 2015
+###
+# countypop <- countypop%>%
+#   filter(abbr == 'CA')
+# 
+# coordinates <- covidGithubmelt%>%
+#   select(county, FIPS, Long_, Lat)%>%
+#   rename(fips = FIPS)%>%
+#   unique()
+# 
+# countypop_cor <- cbind(coordinates[,2:4], countypop[, 2:4])
+# 
+# countypop_cor <- countypop_cor%>%
+#   rename(lon = Long_, lat = Lat)%>%
+#   mutate(lon=round(lat, 2), lat = round(lat, 2))%>%
+#   relocate(lon, lat)
+# 
+# countypop_cor_t <- usmap_transform(countypop_cor)
+# 
+# plot_usmap(include = 'CA', fill = 'white', alpha = 0.25)+
+#   ggrepel::geom_label_repel(data = countypop_cor_t,
+#                             aes(x = lon.1, y = lat.1, label = county),
+#                             size = 3, alpha = 0.8, label.r = unit(0.5, 'lines'), label.size = 0.5,
+#                             segment.color = 'red', segment.size = 1, seed = 1002)+
+#   geom_point(data = countypop_cor_t, aes(x = lon.1, y = lat.1, size = pop_2015),
+#              color = 'purple', alpha = 0.5)+
+#   scale_size_continuous(range = c(1,16), label = scales::comma)+
+#   theme(legend.position = 'right')
+
+```
+
+
+```{r Spatial Visualization of COVID by County, warning=FALSE}
+### Population in 2010 ###
+cities_t <- usmap_transform(citypop)
+
+plot_usmap(fill = 'white', alpha = 0.25)+
+  ggrepel::geom_label_repel(data = cities_t,
+                            aes(x = lon.1, y = lat.1, label = most_populous_city),
+                            size = 3, alpha = 0.8, label.r = unit(0.5, 'lines'), label.size = 0.5,
+                            segment.color = 'red', segment.size = 1, seed = 1002)+
+  geom_point(data = cities_t, aes(x = lon.1, y = lat.1, size = city_pop),
+             color = 'purple', alpha = 0.5)+
+  scale_size_continuous(range = c(1,16), label = scales::comma)+
+  labs(title = "Most Populous City in Each US State",
+       subtitle = 'City Population in 2010 Census',
+       size = 'City Population')+
+  theme(legend.position = 'right')
+###
+
+plot_usmap("counties", include = 'CA', labels = TRUE, label_color = "blue", fill = "yellow",
+           alpha = 0.25, color = "orange", size = 1)+
+  labs(title = 'County Map of California')
+
+# Adjusting Merge data set to ggmap setting with only FIPS and Confirmed variables 
+mapdf <- covidGithubmelt%>%
+  filter(Date == '2020-10-06')%>%
+  select(FIPS, Confirmed)%>%
+  distinct()%>%
+  rename(fips = FIPS)
+
+plot_usmap(data = mapdf, values='Confirmed', include = 'CA')+
+  scale_fill_distiller(type = "seq", palette = "Spectral", direction = -1, name = "Confirmed Cases")+
+  labs(title = 'Total Confirmed Cases in California by County',
+       subtitle = 'Source: Johns Hopkins University Center for Systems Science and Engineering (JHU CSSE)',
+       caption = 'Up until 10/06/2020')+
+  theme(plot.title = element_text(hjust = 0.5, vjust = 0.25, size = 18), legend.position = "right",
+        legend.title = element_text(size = 14), legend.text = element_text(size = 12))
 ```
 
 
@@ -129,25 +210,26 @@ covidGithubmelt <- covidGithubmelt[, c('Date', 'FIPS', 'COUNTY', 'STATE',
 ```
 
 ```{r, message = FALSE, warning = FALSE}
+# Is of merged data set when could be called earlier without AQI data, since no involvement in plot yet
 # Visual map of California by county
-plot_usmap("counties", include = 'CA', labels = TRUE, label_color = "blue", fill = "yellow", alpha = 0.25,
-           color = "orange", size = 1)+
-  labs(title = 'County Map of California')
-
-# Adjusting Merge data set to ggmap setting with only FIPS and Confirmed variables 
-mapdf <- covidGithubmelt%>%
-  filter(Date == '2020-10-06')%>%
-  select(FIPS, Confirmed)%>%
-  distinct()%>%
-  rename(fips = FIPS)
-
-plot_usmap(data = mapdf, values='Confirmed', include = 'CA')+
-  scale_fill_distiller(type = "seq", palette = "Spectral", direction = -1, name = "Confirmed Cases")+
-  labs(title = 'Total Confirmed Cases in California by County',
-       subtitle = 'Source: Johns Hopkins University Center for Systems Science and Engineering (JHU CSSE)',
-       caption = 'Up until 10/06/2020')+
-  theme(plot.title = element_text(hjust = 0.5, vjust = 0.25, size = 18), legend.position = "right",
-        legend.title = element_text(size = 14), legend.text = element_text(size = 12))
+# plot_usmap("counties", include = 'CA', labels = TRUE, label_color = "blue", fill = "yellow", alpha = 0.25,
+#            color = "orange", size = 1)+
+#   labs(title = 'County Map of California')
+# 
+# # Adjusting Merge data set to ggmap setting with only FIPS and Confirmed variables 
+# mapdf <- covidGithubmelt%>%
+#   filter(Date == '2020-10-06')%>%
+#   select(FIPS, Confirmed)%>%
+#   distinct()%>%
+#   rename(fips = FIPS)
+# 
+# plot_usmap(data = mapdf, values='Confirmed', include = 'CA')+
+#   scale_fill_distiller(type = "seq", palette = "Spectral", direction = -1, name = "Confirmed Cases")+
+#   labs(title = 'Total Confirmed Cases in California by County',
+#        subtitle = 'Source: Johns Hopkins University Center for Systems Science and Engineering (JHU CSSE)',
+#        caption = 'Up until 10/06/2020')+
+#   theme(plot.title = element_text(hjust = 0.5, vjust = 0.25, size = 18), legend.position = "right",
+#         legend.title = element_text(size = 14), legend.text = element_text(size = 12))
 ```
 
 ### Covid confirmed cases by county
