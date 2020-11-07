@@ -110,8 +110,9 @@ p1<-NULL
 #   relocate(lon, lat)
 # 
 # countypop_cor_t <- usmap_transform(countypop_cor)
+# help <- us_map(regions = 'counties', include = 'CA')
 # 
-# plot_usmap(include = 'CA', fill = 'white', alpha = 0.25)+
+# plot_usmap(fill = 'white', alpha = 0.25)+
 #   ggrepel::geom_label_repel(data = countypop_cor_t,
 #                             aes(x = lon.1, y = lat.1, label = county),
 #                             size = 3, alpha = 0.8, label.r = unit(0.5, 'lines'), label.size = 0.5,
@@ -120,26 +121,33 @@ p1<-NULL
 #              color = 'purple', alpha = 0.5)+
 #   scale_size_continuous(range = c(1,16), label = scales::comma)+
 #   theme(legend.position = 'right')
-
+# 
+# #help dataset
+# plot_usmap(fill = 'white', alpha = 0.25)+
+#   ggrepel::geom_label_repel(data = help,
+#                             aes(x = x, y = y, label = county),
+#                             size = 3, alpha = 0.8, label.r = unit(0.5, 'lines'), label.size = 0.5,
+#                             segment.color = 'red', segment.size = 1, seed = 1002)
 ```
 
 
 ```{r Spatial Visualization of COVID by County, warning=FALSE}
 ### Population in 2010 ###
-cities_t <- usmap_transform(citypop)
-
-plot_usmap(fill = 'white', alpha = 0.25)+
-  ggrepel::geom_label_repel(data = cities_t,
-                            aes(x = lon.1, y = lat.1, label = most_populous_city),
-                            size = 3, alpha = 0.8, label.r = unit(0.5, 'lines'), label.size = 0.5,
-                            segment.color = 'red', segment.size = 1, seed = 1002)+
-  geom_point(data = cities_t, aes(x = lon.1, y = lat.1, size = city_pop),
-             color = 'purple', alpha = 0.5)+
-  scale_size_continuous(range = c(1,16), label = scales::comma)+
-  labs(title = "Most Populous City in Each US State",
-       subtitle = 'City Population in 2010 Census',
-       size = 'City Population')+
-  theme(legend.position = 'right')
+# cities_t <- usmap_transform(citypop)
+# 
+# test <- plot_usmap(fill = 'white', alpha = 0.25)+
+#   ggrepel::geom_label_repel(data = cities_t,
+#                             aes(x = lon.1, y = lat.1, label = most_populous_city),
+#                             size = 3, alpha = 0.8, label.r = unit(0.5, 'lines'), label.size = 0.5,
+#                             segment.color = 'red', segment.size = 1, seed = 1002)+
+#   geom_point(data = cities_t, aes(x = lon.1, y = lat.1, size = city_pop),
+#              color = 'purple', alpha = 0.5)+
+#   scale_size_continuous(range = c(1,16), label = scales::comma)+
+#   labs(title = "Most Populous City in Each US State",
+#        subtitle = 'City Population in 2010 Census',
+#        size = 'City Population')+
+#   theme(legend.position = 'right')
+# ggplotly(test)
 ###
 
 plot_usmap("counties", include = 'CA', labels = TRUE, label_color = "blue", fill = "yellow",
@@ -149,17 +157,64 @@ plot_usmap("counties", include = 'CA', labels = TRUE, label_color = "blue", fill
 # Adjusting Merge data set to ggmap setting with only FIPS and Confirmed variables 
 mapdf <- covidGithubmelt%>%
   filter(Date == '2020-10-06')%>%
-  select(FIPS, Confirmed)%>%
+  select(FIPS, new_cases)%>%
   distinct()%>%
   rename(fips = FIPS)
 
-plot_usmap(data = mapdf, values='Confirmed', include = 'CA')+
+plot_usmap(data = mapdf, values='new_cases', include = 'CA')+
   scale_fill_distiller(type = "seq", palette = "Spectral", direction = -1, name = "Confirmed Cases")+
   labs(title = 'Total Confirmed Cases in California by County',
        subtitle = 'Source: Johns Hopkins University Center for Systems Science and Engineering (JHU CSSE)',
        caption = 'Up until 10/06/2020')+
   theme(plot.title = element_text(hjust = 0.5, vjust = 0.25, size = 18), legend.position = "right",
         legend.title = element_text(size = 14), legend.text = element_text(size = 12))
+```
+
+```{r Population Visualizations, warning=FALSE, message=FALSE}
+# US Census data of California
+CAcensus <- read_csv("data/cc-est2019-alldata-06.csv")
+
+# 2019 Population Estimate of each CA county from US Census
+CApop <- CAcensus%>%
+  filter(YEAR == 12, AGEGRP == 0)
+
+CApop$COUNTY <- paste0(6, CApop$COUNTY)
+
+# Spatial map of CA county population densities
+Popmapdf <- CApop%>%
+  select(COUNTY, TOT_POP)%>%
+  rename(fips = COUNTY)
+
+plot_usmap(data = Popmapdf, values='TOT_POP', include = 'CA')+
+  scale_fill_distiller(type = "seq", palette = "Spectral", direction = -1, name = "County Populations")+
+  labs(title = '2019 County Population Estimates', subtitle = 'Source: US Census')+
+  theme(plot.title = element_text(hjust = 0.5, vjust = 0.25, size = 18), legend.position = "right",
+        legend.title = element_text(size = 14), legend.text = element_text(size = 12))
+```
+
+```{r COVID vs Population Density}
+# Applying filter for the most current covid data
+covidGithubmelt_today <- covidGithubmelt%>%
+  filter(Date == as.Date(max(Date)))
+
+CApop_today <- CApop%>%
+  rename(FIPS = COUNTY)
+
+# Merging the grand total of covid cases with county population
+cvd_pop<- merge(covidGithubmelt_today, CApop_today, by = 'FIPS')
+
+cvd_pop$per100k = as.numeric(format(round(cvd_pop$Confirmed/(cvd_pop$TOT_POP/100000),1),
+                                      nsmall=1))
+# Adding hoverinfo
+cvd_pop%>% 
+  plot_ly(x = ~TOT_POP, y = ~Confirmed,
+          type = 'scatter', mode = 'markers', color = ~county,
+          size = ~TOT_POP, sizes = c(5, 70), marker = list(sizemode='diameter', opacity=0.5),
+          hoverinfo = 'text',
+          text = ~paste( paste(county, ":", sep=""), paste(" Cases per 100k: ", per100k, sep=""),
+                         paste(' Population: ', TOT_POP, sep=""), sep = "<br>"))%>%
+  layout(title = "Covid Cases by California County vs Population of Each County",
+                  yaxis = list(title = "Cases per 100k"), xaxis = list(title = "Population"))
 ```
 
 
